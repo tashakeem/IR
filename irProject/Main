@@ -1,0 +1,265 @@
+import pickle
+from collections import defaultdict
+from Calculate import Calculate
+from DocumentProcess import DocumentProcess
+from QueryProcess import QueryProcess
+from Similarity import Similarity
+from TermsProcess import TermsProcess
+from Testing import Testing
+from TextProcess import TextProcess
+from Vector import Vector
+from operator import itemgetter
+
+query_process=QueryProcess()
+document_process=DocumentProcess()
+terms_process=TermsProcess()
+vector=Vector()
+similarity=Similarity()
+calculate = Calculate()
+testing=Testing()
+textprocess=TextProcess()
+
+d=1
+
+def read_documents():
+    data1_folder = "cacm/"
+    data2_folder = "cisi/"
+    file1_to_open = data1_folder + "cacm.all"
+    file2_to_open = data2_folder + "CISI.ALL"
+    if d == 1:
+        data = file1_to_open
+    else:
+        data = file2_to_open
+
+    f = open(data)
+    lines = ""
+    for a_line in f.readlines():
+        if a_line.startswith("."):
+            lines += "\n" + a_line.strip()
+        else:
+            lines += " " + a_line.strip()
+    documents = {}
+    content = ""
+    doc_id = ""
+    for a_line in lines.split("\n"):
+        if a_line.startswith(".I"):
+            doc_id = a_line.split(" ")[1].strip()
+        elif a_line.startswith(".X"):
+            documents[doc_id] = content
+            content = ""
+            doc_id = ""
+        else:
+            content += a_line.strip()[3:] + " "
+    f.close()
+    return documents
+
+documents = read_documents()
+
+
+string="What is information science?  Give definitions where possible."
+query={"1":""}
+query["1"]=string
+
+#What is information science?  Give definitions where possible.
+#Information dissemination by journals and periodicals
+#cisi6#What possibilities are there for verbal communication between computers and humans, that is, communication via the spoken word?
+#cacm15#Find all discussions of horizontal microcode optimization with special emphasis on optimization of loops and global optimization.Kenneth Wilson (horizontal microcode opt)"
+
+
+# for key, value in documents.items():
+#     print(f" {key} : {value} \n ")
+
+
+q_tokens = {}
+for key, value in query.items():
+    val = value
+    word_list = query_process.process(val)
+    q_tokens[key] = word_list
+# for key,value in q_tokens.items():
+#         print(f" {key} : {value} \n ")
+
+
+q_stem = {}
+for key, value in q_tokens.items():
+    val = value
+    word_list = query_process.stemming(val)
+    q_stem[key] = word_list
+# for key,value in q_stem.items():
+#     print(f" {key} : {value} \n")
+
+
+q_lem = {}
+for key, value in q_tokens.items():
+    val = value
+    word_list = query_process.lemming(val)
+    q_lem[key] = word_list
+# for key,value in q_lem.items():
+#     print(f" {key} : {value} \n")
+
+
+d_tokens = {}
+for key, value in documents.items():
+    val = value
+    word_list = document_process.process(val)
+    d_tokens[key] = word_list
+# for key,value in d_tokens.items():
+#     print(f" {key} : {value} \n ")
+
+
+d_stem = {}
+for key, value in d_tokens.items():
+    val = value
+    word_list = document_process.stemming(val)
+    d_stem[key] = word_list
+# for key,value in d_stem.items():
+#     print(f" {key} : {value} \n")
+
+
+d_lem = {}
+for key, value in d_tokens.items():
+    val = value
+    word_list = document_process.lemming(val)
+    d_lem[key] = word_list
+# for key,value in d_lem.items():
+#     print(f" {key} : {value} \n")
+
+
+for key, value in documents.items():
+    textprocess.check(value)
+    textprocess.get_date(value)
+
+
+# falseQuery="Wwhaat is informatio scienc? Givve defenitions wherew posssible."
+# print(textprocess.auto_correct(falseQuery))
+
+
+document_terms = {}
+qurey_terms = {}
+for doc_id in d_lem.keys():
+    document_terms[doc_id] = terms_process.get_terms(d_lem.get(doc_id))
+
+for q_id in q_lem.keys():
+    qurey_terms[q_id] = terms_process.get_terms(q_lem.get(q_id))
+
+# for key,value in qurey_terms.items():
+#     print(f" {key} : {value} \n\n\n")
+# for key,value in document_terms.items():
+#      print(f" {key} : {value} \n")
+
+
+extracted_terms  = terms_process.extract_terms(document_terms,qurey_terms)
+# for v in extracted_terms:
+#     print(v)
+
+# for s in sorted(terms_process.term_index.items()):
+#     print(s)
+
+####################################################################################
+
+
+document_idfs = similarity.get_idf(extracted_terms,document_terms)
+
+# index = defaultdict(list)
+#
+# for d in (document_idfs, terms_process.term_index):
+#     for key, value in d.items():
+#         index[key].append(value)
+#
+# with open("index1.txt", 'w') as f:
+#     for key, value in index.items():
+#         f.write('%s:%s\n' % (key, value))
+# f.close()
+
+qurey_vectors = vector.query_vectorize(qurey_terms, extracted_terms)
+
+document_vectors = vector.docs_vectorize(document_terms, document_idfs, extracted_terms)
+
+# with open("vectors.txt", 'w') as f:
+#     for key, value in document_vectors.items():
+#         f.write('%s:%s\n' % (key, value))
+# f.close()
+#
+# file = open("vec.txt", "wb")
+# pickle.dump(document_vectors, file)
+# file.close()
+
+
+# with open('vec.txt', 'rb') as handle:
+#     data = handle.read()
+# d = pickle.loads(data)
+# print(d)
+
+
+
+results = {}
+query = qurey_vectors.get("1")
+
+for doc_id in document_vectors.keys():
+    document = document_vectors.get(doc_id)
+    cosine = calculate.dot_product(query,document)/(calculate.length(query)*calculate.length(document))
+    # cosine = similarity.cosine_similarity(query,document)
+    if cosine != 0.0:
+        results[doc_id] = cosine
+
+
+sorted_results=sorted(results.items(), key=itemgetter(1), reverse=True)
+# for s in sorted_results[:10]:
+#     print(s)
+
+
+for items in sorted_results[:10]:
+    key=items[0]
+    doc_res=documents.get(key)
+    print(items[0]+" : "+doc_res+"\n")
+
+
+
+# def read_rels():
+#     mdata1_folder = "cacm/"
+#     mdata2_folder = "cisi/"
+#     mfile1_to_open = mdata1_folder + "qrels.text"
+#     mfile2_to_open = mdata2_folder + "CISI.REL"
+#     if d == 1:
+#         mdata = mfile1_to_open
+#     else:
+#         mdata = mfile2_to_open
+#
+#     f = open(mdata)
+#     lines = {}
+#     for a_line in f.readlines():
+#         voc = a_line.strip().split()
+#         key = voc[0].strip()
+#         current_value = voc[1].strip()
+#         value = []
+#         if key in lines.keys():
+#             value = lines.get(key)
+#         value.append(current_value)
+#         lines[key] = value
+#     f.close()
+#     return lines
+#
+# rels = read_rels()
+#
+# # print("################")
+# relevant=rels.get("3")
+# print(relevant)
+
+# print(len(mappings))
+# print(mappings.keys())
+# print(mappings.get("1"))
+
+
+# print("################")
+#
+#
+# precision=testing.calculate_precision(results,relevant)
+# print(precision)
+#
+# recall=testing.calculate_recall(results,relevant)
+# print(recall)
+#
+# MAP=testing.MAP(relevant,results)
+# print(MAP)
+#
+# AP=testing.AP(relevant, results, k=10)
+# print(AP)
